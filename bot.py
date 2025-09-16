@@ -1,113 +1,93 @@
-import os
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ConversationHandler,
-    ContextTypes
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    filters, ContextTypes
 )
+import uuid
 
-# مراحل گفتگو
-(
-    ASK_MODEL, ASK_COLOR, ASK_SIZE, ASK_GENDER,
-    ASK_NAME, ASK_PHONE, ASK_ADDRESS
-) = range(7)
+# دیتابیس ساده کاربران
+users = {}  # user_id: {ref_code, inviter_id, balance, invites}
 
-# مدل‌ها و رنگ‌ها
-models = ["کفش اسپرت ۱", "کفش اسپرت ۲", "کفش رسمی ۱", "کفش رسمی ۲", "کفش پیاده‌روی", "کفش ورزشی"]
-colors = ["سفید", "آبی", "سبز"]
-sizes = [str(i) for i in range(36, 46)]
-genders = ["خانم", "آقا"]
+# ثبت‌نام با پرداخت فرضی
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
-# شروع سفارش
-async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reply_markup = ReplyKeyboardMarkup([models], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("مدل کفش مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
-    return ASK_MODEL
+    if user_id in users:
+        await update.message.reply_text("✅ قبلاً ثبت‌نام کردی.\nلینک دعوت اختصاصی شما:\n" +
+            f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}")
+        return
 
-# انتخاب مدل
-async def ask_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["model"] = update.message.text
-    reply_markup = ReplyKeyboardMarkup([colors], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("رنگ کفش را انتخاب کنید:", reply_markup=reply_markup)
-    return ASK_COLOR
-
-# انتخاب رنگ
-async def ask_size(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["color"] = update.message.text
-    reply_markup = ReplyKeyboardMarkup([sizes[i:i+5] for i in range(0, len(sizes), 5)], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("سایز کفش را انتخاب کنید:", reply_markup=reply_markup)
-    return ASK_SIZE
-
-# انتخاب جنسیت
-async def ask_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["size"] = update.message.text
-    reply_markup = ReplyKeyboardMarkup([genders], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("جنسیت را انتخاب کنید:", reply_markup=reply_markup)
-    return ASK_GENDER
-
-# دریافت نام
-async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["gender"] = update.message.text
-    await update.message.reply_text("نام و نام خانوادگی را وارد کنید:")
-    return ASK_NAME
-
-# دریافت شماره
-async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["name"] = update.message.text
-    await update.message.reply_text("شماره تلفن را وارد کنید:")
-    return ASK_PHONE
-
-# دریافت آدرس و نمایش سفارش
-async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["phone"] = update.message.text
-    await update.message.reply_text("آدرس کامل را وارد کنید:")
-    return ASK_ADDRESS
-
-# پایان سفارش
-async def finish_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["address"] = update.message.text
-    data = context.user_data
+    # پرداخت فرضی ۲۰٬۰۰۰ تومان
+    users[user_id] = {
+        "ref_code": str(uuid.uuid4())[:8],
+        "inviter_id": None,
+        "balance": 0,
+        "invites": 0
+    }
 
     await update.message.reply_text(
-        f"✅ سفارش ثبت شد:\n"
-        f"مدل کفش: {data['model']}\n"
-        f"رنگ: {data['color']}\n"
-        f"سایز: {data['size']}\n"
-        f"جنسیت: {data['gender']}\n"
-        f"نام: {data['name']}\n"
-        f"شماره تلفن: {data['phone']}\n"
-        f"آدرس: {data['address']}"
+        "🎉 ثبت‌نام موفق! لینک اختصاصی شما:\n" +
+        f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}"
     )
-    return ConversationHandler.END
 
-# لغو سفارش
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سفارش لغو شد ❌")
-    return ConversationHandler.END
+# بررسی لینک دعوت
+async def referral_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    args = context.args
+
+    if user_id in users:
+        await update.message.reply_text("شما قبلاً ثبت‌نام کردید.")
+        return
+
+    inviter_id = None
+    if args:
+        ref_code = args[0]
+        for uid, data in users.items():
+            if data["ref_code"] == ref_code:
+                inviter_id = uid
+                break
+
+    users[user_id] = {
+        "ref_code": str(uuid.uuid4())[:8],
+        "inviter_id": inviter_id,
+        "balance": 0,
+        "invites": 0
+    }
+
+    if inviter_id:
+        users[inviter_id]["balance"] += 10000
+        users[inviter_id]["invites"] += 1
+        await update.message.reply_text("🎉 ثبت‌نام با لینک دعوت انجام شد!")
+    else:
+        await update.message.reply_text("🎉 ثبت‌نام انجام شد!")
+
+    await update.message.reply_text(
+        "لینک اختصاصی شما:\n" +
+        f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}"
+    )
+
+# نمایش موجودی و تعداد دعوت‌شده‌ها
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in users:
+        await update.message.reply_text("❌ هنوز ثبت‌نام نکردی. اول /start رو بزن.")
+        return
+
+    data = users[user_id]
+    await update.message.reply_text(
+        f"👤 پروفایل شما:\n"
+        f"موجودی هدیه: {data['balance']} تومان\n"
+        f"تعداد دعوت‌شده‌ها: {data['invites']}\n"
+        f"لینک اختصاصی:\nhttps://t.me/{context.bot.username}?start={data['ref_code']}"
+    )
 
 # اجرای ربات
 def main():
-    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # دریافت توکن از محیط امن
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("order", start_order)],
-        states={
-            ASK_MODEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_color)],
-            ASK_COLOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_size)],
-            ASK_SIZE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_gender)],
-            ASK_GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
-            ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
-            ASK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_address)],
-            ASK_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_order)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)]
-    )
+    app.add_handler(CommandHandler("start", referral_check))
+    app.add_handler(CommandHandler("profile", profile))
 
-    app.add_handler(conv_handler)
     app.run_polling()
 
 if __name__ == "__main__":
