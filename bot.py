@@ -83,7 +83,9 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # اجرای ربات
 def main():
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+    import os
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", referral_check))
     app.add_handler(CommandHandler("profile", profile))
