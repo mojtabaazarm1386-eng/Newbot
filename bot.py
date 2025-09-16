@@ -1,42 +1,23 @@
+import os
+import uuid
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    filters, ContextTypes
+    ApplicationBuilder, CommandHandler, ContextTypes
 )
-import uuid
 
-# دیتابیس ساده کاربران
+# دیتابیس ساده در حافظه
 users = {}  # user_id: {ref_code, inviter_id, balance, invites}
 
-# ثبت‌نام با پرداخت فرضی
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id in users:
-        await update.message.reply_text("✅ قبلاً ثبت‌نام کردی.\nلینک دعوت اختصاصی شما:\n" +
-            f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}")
-        return
-
-    # پرداخت فرضی ۲۰٬۰۰۰ تومان
-    users[user_id] = {
-        "ref_code": str(uuid.uuid4())[:8],
-        "inviter_id": None,
-        "balance": 0,
-        "invites": 0
-    }
-
-    await update.message.reply_text(
-        "🎉 ثبت‌نام موفق! لینک اختصاصی شما:\n" +
-        f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}"
-    )
-
-# بررسی لینک دعوت
+# ثبت‌نام با لینک اختصاصی
 async def referral_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     args = context.args
 
     if user_id in users:
-        await update.message.reply_text("شما قبلاً ثبت‌نام کردید.")
+        await update.message.reply_text(
+            "✅ قبلاً ثبت‌نام کردی.\nلینک اختصاصی شما:\n" +
+            f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}"
+        )
         return
 
     inviter_id = None
@@ -47,6 +28,7 @@ async def referral_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 inviter_id = uid
                 break
 
+    # ثبت‌نام جدید با اعتبار مجازی
     users[user_id] = {
         "ref_code": str(uuid.uuid4())[:8],
         "inviter_id": inviter_id,
@@ -57,7 +39,7 @@ async def referral_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if inviter_id:
         users[inviter_id]["balance"] += 10000
         users[inviter_id]["invites"] += 1
-        await update.message.reply_text("🎉 ثبت‌نام با لینک دعوت انجام شد!")
+        await update.message.reply_text("🎉 ثبت‌نام با لینک دعوت انجام شد! معرف شما هدیه گرفت.")
     else:
         await update.message.reply_text("🎉 ثبت‌نام انجام شد!")
 
@@ -66,7 +48,7 @@ async def referral_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"https://t.me/{context.bot.username}?start={users[user_id]['ref_code']}"
     )
 
-# نمایش موجودی و تعداد دعوت‌شده‌ها
+# نمایش پروفایل کاربر
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in users:
@@ -83,9 +65,8 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # اجرای ربات
 def main():
-    import os
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-app = ApplicationBuilder().token(TOKEN).build()
+    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # توکن از محیط امن
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", referral_check))
     app.add_handler(CommandHandler("profile", profile))
